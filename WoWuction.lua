@@ -91,7 +91,7 @@ function lib.GetPriceArray(id, serverKey)
 	array.latest = TSM:GetData(id, "minBuyout")
 	array.median = TSM:GetData(id, "medianPrice")
 	array.mean = array.price
-	array.stddev = TSM:GetData(id, "medianPriceErr") or TSM:GetData(id, "marketValueErr")
+	array.stddev = TSM:GetData(id, "medianPriceErr")
 	array.cstddev = TSM:GetData(id, "marketValueErr")
 	array.region_median = TSM:GetData(id, "regionMedianPrice")
 	array.region_stddev = TSM:GetData(id, "regionMedianPriceErr")
@@ -104,7 +104,8 @@ end
 
 local bellCurve = AucAdvanced.API.GenerateBellCurve()
 local weight, median, stddev
-local pdfcache = {}
+local pdfcache = {} -- FIXME: should be cleared when settings change
+local n = get("stat.wowuction.n")
 function lib.GetItemPDF(hyperlink, serverKey)
 	if not get("stat.wowuction.enable") then return end
 	if pdfcache[hyperlink] then
@@ -114,23 +115,42 @@ function lib.GetItemPDF(hyperlink, serverKey)
 		local array = lib.GetPriceArray(hyperlink, serverKey)
 		median = array.median
 		local price = array.price
-		stddev = array.stddev
+		local regionMedian = array.region_median
+		local regionStddev = array.region_stddev
+		local regionPrice = array.region_price
+		stddev = array.stddev or array.cstddev
 		local priceshock = get("stat.wowuction.detectpriceshocks")
 		local stddevshock = get("stat.wowuction.detectstddevshocks")
-		if (not price) or (not stddev) then
-	--		print(string.format("No data for %s\n",hyperlink))
-			return -- no available data
+		if not price then
+			if median then
+				price = median
+			elseif get("stat.wowuction.regionfallback") then
+				median = regionMedian
+				if regionPrice then
+					price = regionPrice
+				elseif not median then
+					return -- no data
+				else
+					priceshock = false -- nothing to check against
+				end
+			else
+				return -- no data
+			end
+		end
+		if not stddev then
+			if regionStddev and get("stat.wowuction.regionfallback") then
+				stddev = regionStddev * sqrt(n-1)
+				stddevshock = false -- nothing to check against
+			else
+				return -- no stddev
+			end
 		end
 		if median then
 			local minpct = get("stat.wowuction.minerrorpct") * .01
 			if stddev < median*minpct then stddev = median*minpct end
 			local zlimit = get("stat.wowuction.maxz")
 			if priceshock or stddevshock then
-				local regionMedian = array.region_median
-				local regionStddev = array.region_stddev
-				local regionPrice = array.region_price
 				if regionMedian and regionStddev and regionPrice then 
-					local n = get("stat.wowuction.n")
 					if regionStddev < regionMedian*minpct then regionStddev = regionMedian * minpct end
 					-- use this realm's medianPriceErr and the number of realms to estimate
 					-- how much increase of regionMarketPriceErr over regionMedianPriceErr
@@ -246,6 +266,8 @@ function private.SetupConfigGui(gui)
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectStddevShocks'))
 		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_Interface_N') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_N'))
+		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.regionfallback", _TRANS('WOWUCTION_Interface_RegionFallback'))
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_RegionFallback'))
 
 	end
 

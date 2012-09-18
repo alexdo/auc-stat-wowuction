@@ -43,14 +43,16 @@
 
 		-- Section: HelpTooltip
 		["WOWUCTION_HelpTooltip_Enablewowuction"] = "Allow Auctioneer to use market data from WoWuction for this realm and faction.",
+		["WOWUCTION_HelpTooltip_RegionFallback"] = "Use the region-wide price for items that WoWuction hasn't seen on this realm in 14 days.",
 		["WOWUCTION_HelpTooltip_MaxZScore"] = "Current prices are considered outliers when they deviate from the 14-day median by more than this number times the standard error of the median (the +/- range in the tooltip), i.e. when they fall outside modified Bollinger Bands with N=14 and this value of K.",
 		["WOWUCTION_HelpTooltip_DetectStddevShocks"] = "Widen the margin of error for item prices that show more realm-to-realm variation today than normally. This may indicate that a recent systematic change, such as a patch, has shrunk the markets for the item.",
 		["WOWUCTION_HelpTooltip_DetectPriceShocks"] = "Use the current market price instead of the 14-day moving median when today's region-wide median price is an outlier on the same side. This may indicate that a recent systematic change, such as a patch, has permanently changed the price range.",
 		["WOWUCTION_HelpTooltip_CurrentPriceWeight"] = "Percentage of the price estimate that comes from the latest market price rather than the 14-day median. Increase if Auctioneer market prices aren't keeping up with market trends; decrease if they become unstable. If Price Breakout Detection is enabled, it will override this setting when triggered.",
-		["WOWUCTION_HelpTooltip_N"] = "The number of active Auction Houses in this region (usually one Alliance and one Horde in every realm), excluding public test and Arena Pass realms. Only used if Price Breakout Detection or Volatility Shock Detection is enabled.",
+		["WOWUCTION_HelpTooltip_N"] = "The number of active Auction Houses in this region (usually one Alliance and one Horde in every realm), excluding public test and Arena Pass realms. Only used if Price Breakout Detection, Volatility Shock Detection or Region-Wide Fallback is enabled.",
 		["WOWUCTION_HelpTooltip_MinErrorPercent"] = "A minimum estimate of the standard error of the median, as a percentage. Use this to avoid overreacting to small fluctuations when the tooltip +/- ranges are abnormally low.",
 		-- Section: Interface
 		["WOWUCTION_Interface_Enablewowuction"] = "Enable WoWuction Realm Stats",
+		["WOWUCTION_Interface_RegionFallback"] = "Region-Wide Fallback",
 		["WOWUCTION_Interface_MaxZScore"] = "Critical Z-score",
 		["WOWUCTION_Interface_DetectStddevShocks"] = "Volatility Shock Detection",
 		["WOWUCTION_Interface_DetectPriceShocks"] = "Price Breakout Detection",
