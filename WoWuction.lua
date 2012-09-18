@@ -80,87 +80,100 @@ end
 
 local array = {}
 local seen
-function lib.GetPriceArray(hyperlink, serverKey)
+function lib.GetPriceArray(id, serverKey)
 	if not get("stat.wowuction.enable") then return end
 --	seen = get("stat.wowuction.seen")
 	wipe(array)
-
+--	local _, _, _, _, id = hyperlink:find("|?c?f?f?(%x*)|?H?([^:]*):?(%d+):?(%d*):?(%d*):?(%d*):?(%d*):?(%d*):?(%-?%d*):?(%-?%d*):?(%d*)|?h?%[?([^%[%]]*)%]?|?h?|?r?")
 	-- Required entries (see Stat-Example2)
-	array.price = TSM:GetData(hyperlink, "marketValue")
+	array.price = TSM:GetData(id, "marketValue")
 --	array.seen = seen
-	array.latest = TSM:GetData(hyperlink, "minBuyout")
-	array.median = TSM:GetData(hyperlink, "medianPrice")
+	array.latest = TSM:GetData(id, "minBuyout")
+	array.median = TSM:GetData(id, "medianPrice")
 	array.mean = array.price
-	array.stddev = TSM:GetData(hyperlink, "medianPriceErr") or TSM:GetData(hyperlink, "marketValueErr")
+	array.stddev = TSM:GetData(id, "medianPriceErr") or TSM:GetData(id, "marketValueErr")
+	array.cstddev = TSM:GetData(id, "marketValueErr")
+	array.region_median = TSM:GetData(id, "regionMedianPrice")
+	array.region_stddev = TSM:GetData(id, "regionMedianPriceErr")
+	array.region_price = TSM:GetData(id, "regionMarketValue")
+	array.region_cstddev = TSM:GetData(id, "regionMarketValueErr") or 0
 --	array.qty = seen
 
 	return array
 end
 
 local bellCurve = AucAdvanced.API.GenerateBellCurve()
-local weight
+local weight, median, stddev
+local pdfcache = {}
 function lib.GetItemPDF(hyperlink, serverKey)
 	if not get("stat.wowuction.enable") then return end
-	local array = lib.GetPriceArray(hyperlink, serverKey)
-	local median = array.median
-	local price = array.price
-	local stddev = array.stddev
-	local priceshock = get("stat.wowuction.detectpriceshocks")
-	local stddevshock = get("stat.wowuction.detectstddevshocks")
-	if (not price) or (not stddev) then
-		return -- no available data
-	end
-	if median then
-		local minpct = get("stat.wowuction.minerrorpct") * .01
-		if stddev < median*minpct then stddev = median*minpct end
-		local zlimit = get("stat.wowuction.maxz")
-		if priceshock or stddevshock then
-			local regionMedian = TSM:GetData(hyperlink, "regionMedianPrice")
-			local regionStddev = TSM:GetData(hyperlink, "regionMedianPriceErr")
-			local regionPrice = TSM:GetData(hyperlink, "regionPrice")
-			if regionMedian and regionStddev and regionPrice then 
-				local n = get("stat.wowuction.n")
-				if regionStddev < regionMedian*minpct then regionStddev = regionMedian * minpct end
-				-- use this realm's medianPriceErr and the number of realms to estimate
-				-- how much increase of regionMarketPriceErr over regionMedianPriceErr
-				-- could be explained by "normal" within-realm fluctuations
-				-- (multiplied by regionMedian/median to convert from realm-specific to median-realm coins,
-				-- and assuming we're on a representative realm in all other respects)
-				local adjustedStddev = sqrt(regionStddev*regionStddev + regionMedian*stddev*stddev/((n-1)*median))
-				if stddevshock then
-					local regionCurrentStddev = TSM:GetData(hyperlink, "regionMarketPriceErr") or 0
-					if regionCurrentStddev > adjustedStddev * zlimit then
-						-- stddev-widening shock detected!
-						io.write(string.format(_TRANS('WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'), hyperlink, adjustedStddev, regionCurrentStddev))
-						stddev = stddev * regionCurrentStddev / adjustedStddev
+	if pdfcache[hyperlink] then
+		median = pdfcache[hyperlink]["median"]
+		stddev = pdfcache[hyperlink]["stddev"]
+	else
+		local array = lib.GetPriceArray(hyperlink, serverKey)
+		median = array.median
+		local price = array.price
+		stddev = array.stddev
+		local priceshock = get("stat.wowuction.detectpriceshocks")
+		local stddevshock = get("stat.wowuction.detectstddevshocks")
+		if (not price) or (not stddev) then
+	--		print(string.format("No data for %s\n",hyperlink))
+			return -- no available data
+		end
+		if median then
+			local minpct = get("stat.wowuction.minerrorpct") * .01
+			if stddev < median*minpct then stddev = median*minpct end
+			local zlimit = get("stat.wowuction.maxz")
+			if priceshock or stddevshock then
+				local regionMedian = array.region_median
+				local regionStddev = array.region_stddev
+				local regionPrice = array.region_price
+				if regionMedian and regionStddev and regionPrice then 
+					local n = get("stat.wowuction.n")
+					if regionStddev < regionMedian*minpct then regionStddev = regionMedian * minpct end
+					-- use this realm's medianPriceErr and the number of realms to estimate
+					-- how much increase of regionMarketPriceErr over regionMedianPriceErr
+					-- could be explained by "normal" within-realm fluctuations
+					-- (multiplied by regionMedian/median to convert from realm-specific to median-realm coins,
+					-- and assuming we're on a representative realm in all other respects)
+					local adjustedStddev = sqrt(regionStddev*regionStddev + regionMedian*stddev*stddev/((n-1)*median))
+					if stddevshock then
+						local regionCurrentStddev = array.region_cstddev
+						if regionCurrentStddev > adjustedStddev * zlimit then
+							-- stddev-widening shock detected!
+							print(string.format(_TRANS('WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'), hyperlink, adjustedStddev, regionCurrentStddev))
+							stddev = stddev * regionCurrentStddev / adjustedStddev
+						end
 					end
-				end
-				if priceshock then
-					local z = (regionPrice - regionMedian)/adjustedStddev
-					if (z > zlimit and price > median) or (z < -limit and price < median) then
-						-- price shock detected!
-						io.write(string.format(_TRANS('WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'), hyperlink, adjustedStddev, z))
-						-- median now obsolete, so use latest price
-						median = price
-						-- check for widened stddev
-						local newErr = TSM:GetData(hyperlink, "marketPriceErr")
-						if newErr and (newErr > stddev) then
-							stddev = newErr
+					if priceshock then
+						local z = (regionPrice - regionMedian)/adjustedStddev
+						if (z > zlimit and price > median) or (z < -zlimit and price < median) then
+							-- price shock detected!
+							print(string.format(_TRANS('WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'), hyperlink, adjustedStddev, z))
+							-- median now obsolete, so use latest price
+							median = price
+							-- check for widened stddev
+							local newErr = array.cstddev
+							if newErr and (newErr > stddev) then
+								stddev = newErr
+							end
 						end
 					end
 				end
 			end
+			local z = (price - median)/stddev
+			if z > zlimit then
+				price = median + zlimit*stddev
+			elseif z < -zlimit then
+				price = median - zlimit*stddev
+			end
+			local currWeight = get("stat.wowuction.cur_price_weight")
+			median = median * (1 - currWeight) + price * currWeight
+		else
+			median = price
 		end
-		local z = (price - median)/stddev
-		if z > zlimit then
-			price = median + zlimit*stddev
-		elseif z < -zlimit then
-			price = median - zlimit*stddev
-		end
-		local currWeight = get("stat.wowuction.cur_price_weight")
-		median = median * (1 - currWeight) + price * currWeight
-	else
-		median = price
+		pdfcache[hyperlink] = {["median"] = median, ["stddev"] = stddev}
 	end
 	-- Calculate the lower and upper bounds as +/- 3 standard deviations
 	local lower, upper = (median - 3 * stddev), (median + 3 * stddev)
@@ -187,15 +200,15 @@ function private.OnLoad(addon)
 	private.OnLoad = nil -- only run this function once
 end
 
-function private.GetInfo(hyperlink, serverKey)
-	if not private.IswowuctionLoaded() then return end
+--~ function private.GetInfo(hyperlink, serverKey)
+--~ 	if not private.IswowuctionLoaded() then return end
 
-	local linkType, itemId, suffix, factor = decode(hyperlink)
-	if (linkType ~= "item") then return end
+--~ 	local linkType, itemId, suffix, factor = decode(hyperlink)
+--~ 	if (linkType ~= "item") then return end
 
-	local dta = TSM:GetData(itemId, serverKey)
-	return dta
-end
+--~ 	local dta = TSM:GetData(itemId, serverKey)
+--~ 	return dta
+--~ end
 
 -- Localization via Auctioneer's Babylonian; from Auc-Advanced/CoreUtil.lua
 local Babylonian = LibStub("Babylonian")
@@ -231,7 +244,7 @@ function private.SetupConfigGui(gui)
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectPriceShocks'))
 		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.detectstddevshocks", _TRANS('WOWUCTION_Interface_DetectStddevShocks'))
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectStddevShocks'))
-		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_N') )
+		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_Interface_N') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_N'))
 
 	end
