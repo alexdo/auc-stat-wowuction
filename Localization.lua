@@ -34,15 +34,26 @@
 
  AucStatwowuctionLocalizations = {
 	enUS = {
+		-- Section: Alerts
+		['WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'] = "Region-wide volatility shock detected on %s! Expected region market price to be +/- no more than %d; actually +/- %d. Increasing the error margin on this realm's price.\n",
+		['WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'] = "Region-wide price shock detected on %s! Region market price is %f times as far from the median as expected error %d. Using this realm's latest price instead of the 14-day moving median.\n", 
 		-- Section: Help
 		['WOWUCTION_Help_wowuction'] = "What is WoWuction?",
 		['WOWUCTION_Help_wowuctionAnswer'] = "WoWuction is a website that reads most of a realm's Auction House data about once every hour and packages that market data into an addon. Data is collected for every item on the auction house, except for randomly-enchanted weapons and armor. The data includes the most recent market price, the average price from the past 14 days, and the standard deviation. Similar data from the entire region (i.e. all US servers or all EU servers) is also available.",
 
 		-- Section: HelpTooltip
 		["WOWUCTION_HelpTooltip_Enablewowuction"] = "Allow Auctioneer to use market data from WoWuction for this realm and faction.",
-		["WOWUCTION_HelpTooltip_Seen"] = "Count realm-specific WoWuction data as this many auctions for Appraiser purposes (since WoWuction doesn't report actual seen counts).",
+		["WOWUCTION_HelpTooltip_MaxZScore"] = "Current prices are considered outliers when they deviate from the 14-day median by more than this number times the standard error of the median (the +/- range in the tooltip), i.e. when they fall outside modified Bollinger Bands with N=14 and this value of K.",
+		["WOWUCTION_HelpTooltip_DetectStddevShocks"] = "Widen the margin of error for item prices that show more realm-to-realm variation today than normally. This may indicate that a recent systematic change, such as a patch, has shrunk the markets for the item.",
+		["WOWUCTION_HelpTooltip_DetectPriceShocks"] = "Use the current market price instead of the 14-day moving median when today's region-wide median price is an outlier on the same side. This may indicate that a recent systematic change, such as a patch, has permanently changed the price range.",
+		["WOWUCTION_HelpTooltip_N"] = "The number of active Auction Houses in this region (usually one Alliance and one Horde in every realm), excluding public test and Arena Pass realms.",
+		["WOWUCTION_HelpTooltip_MinErrorPercent"] = "A minimum estimate of the standard error of the median, as a percentage. Use this to avoid overreacting to small fluctuations when the tooltip +/- ranges are abnormally low.",
 		-- Section: Interface
 		["WOWUCTION_Interface_Enablewowuction"] = "Enable WoWuction Realm Stats",
-		["WOWUCTION_Interface_Seen"] = "Seen count",
+		["WOWUCTION_Interface_MaxZScore"] = "Critical Z-score",
+		["WOWUCTION_Interface_DetectStddevShocks"] = "Volatility shock detection",
+		["WOWUCTION_Interface_DetectPriceShocks"] = "Price breakout detection",
+		["WOWUCTION_Interface_DetectPriceShocks"] = "Price breakout detection",
+		["WOWUCTION_Interface_MinErrorPercent"] = "Minimum standard error",
 	},
 }

@@ -91,7 +91,7 @@ function lib.GetPriceArray(hyperlink, serverKey)
 	array.latest = TSM:GetData(hyperlink, "minBuyout")
 	array.median = TSM:GetData(hyperlink, "medianPrice")
 	array.mean = array.price
-	array.stddev = TSM:GetData(hyperlink, "marketValueErr")
+	array.stddev = TSM:GetData(hyperlink, "medianPriceErr") or TSM:GetData(hyperlink, "marketValueErr")
 --	array.qty = seen
 
 	return array
@@ -101,16 +101,71 @@ local bellCurve = AucAdvanced.API.GenerateBellCurve()
 local weight
 function lib.GetItemPDF(hyperlink, serverKey)
 	if not get("stat.wowuction.enable") then return end
-	local mean = TSM:GetData(hyperlink, "marketValue")
-	local stddev = TSM:GetData(hyperlink, "marketValueErr")
-	if (not mean) or (not stddev) then
+	local array = lib.GetPriceArray(hyperlink, serverKey)
+	local median = array.median
+	local price = array.price
+	local stddev = array.stddev
+	local priceshock = get("stat.wowuction.detectpriceshocks")
+	local stddevshock = get("stat.wowuction.detectstddevshocks")
+	if (not price) or (not stddev) then
 		return -- no available data
 	end
-
+	if median then
+		local minpct = get("stat.wowuction.minerrorpct") * .01
+		if stddev < median*minpct then stddev = median*minpct end
+		local zlimit = get("stat.wowuction.maxz")
+		if priceshock or stddevshock then
+			local regionMedian = TSM:GetData(hyperlink, "regionMedianPrice")
+			local regionStddev = TSM:GetData(hyperlink, "regionMedianPriceErr")
+			local regionPrice = TSM:GetData(hyperlink, "regionPrice")
+			if regionMedian and regionStddev and regionPrice then 
+				local n = get("stat.wowuction.n")
+				if regionStddev < regionMedian*minpct then regionStddev = regionMedian * minpct end
+				-- use this realm's medianPriceErr and the number of realms to estimate
+				-- how much increase of regionMarketPriceErr over regionMedianPriceErr
+				-- could be explained by "normal" within-realm fluctuations
+				-- (multiplied by regionMedian/median to convert from realm-specific to median-realm coins,
+				-- and assuming we're on a representative realm in all other respects)
+				local adjustedStddev = sqrt(regionStddev*regionStddev + regionMedian*stddev*stddev/((n-1)*median))
+				if stddevshock then
+					local regionCurrentStddev = TSM:GetData(hyperlink, "regionMarketPriceErr") or 0
+					if regionCurrentStddev > adjustedStddev * zlimit then
+						-- stddev-widening shock detected!
+						io.write(string.format(_TRANS('WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'), hyperlink, adjustedStddev, regionCurrentStddev))
+						stddev = stddev * regionCurrentStddev / adjustedStddev
+					end
+				end
+				if priceshock then
+					local z = (regionPrice - regionMedian)/adjustedStddev
+					if (z > zlimit and price > median) or (z < -limit and price < median) then
+						-- price shock detected!
+						io.write(string.format(_TRANS('WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'), hyperlink, adjustedStddev, z))
+						-- median now obsolete, so use latest price
+						median = price
+						-- check for widened stddev
+						local newErr = TSM:GetData(hyperlink, "marketPriceErr")
+						if newErr and (newErr > stddev) then
+							stddev = newErr
+						end
+					end
+				end
+			end
+		end
+		local z = (price - median)/stddev
+		if z > zlimit then
+			price = median + zlimit*stddev
+		elseif z < -zlimit then
+			price = median - zlimit*stddev
+		end
+		local currWeight = get("stat.wowuction.cur_price_weight")
+		median = median * (1 - currWeight) + price * currWeight
+	else
+		median = price
+	end
 	-- Calculate the lower and upper bounds as +/- 3 standard deviations
-	local lower, upper = (mean - 3 * stddev), (mean + 3 * stddev)
+	local lower, upper = (median - 3 * stddev), (median + 3 * stddev)
 
-	bellCurve:SetParameters(mean, stddev)
+	bellCurve:SetParameters(median, stddev)
 	return bellCurve, lower, upper
 end
 
@@ -122,7 +177,13 @@ end
 
 function private.OnLoad(addon)
 	default("stat.wowuction.enable", false)
-	default("stat.wowuction.seen", 100)
+--	default("stat.wowuction.seen", 100)
+	default("stat.wowuction.cur_price_weight", 0.1)
+	default("stat.wowuction.maxz", 2) -- because this parameter is used to effectively apply median-centered Bollinger Bands
+	default("stat.wowuction.minerrorpct", 1)
+	default("stat.wowuction.detectpriceshocks", true)
+	default("stat.wowuction.detectstddevshocks", true)
+	default("stat.wowuction.n", 492) -- 2 factions * 246 US realms as of 2012-09-17 (excludes Arena Pass)
 	private.OnLoad = nil -- only run this function once
 end
 
@@ -160,8 +221,19 @@ function private.SetupConfigGui(gui)
 --		gui:AddControl(id, "Note",       0, 1, nil, nil, " ")
 		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.enable", _TRANS('WOWUCTION_Interface_Enablewowuction'))
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Enablewowuction'))
---		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.seen", 0, 1000, 1, _TRANS('WOWUCTION_Interface_Seen') )--Weight for cross-realm data: %d %%
---		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Seen')) -- count regionwide data as this many points
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.cur_price_weight", 0, 1, 0.05, _TRANS('WOWUCTION_Interface_CurrentPriceWeight') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_CurrentPriceWeight'))
+		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.maxz", 0, 1000, _TRANS('WOWUCTION_Interface_MaxZScore') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_MaxZScore'))
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.minerrorpct", 0, 10, 0.5, _TRANS('WOWUCTION_Interface_MinErrorPercent') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_MinErrorPercent'))
+		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.detectpriceshocks", _TRANS('WOWUCTION_Interface_DetectPriceShocks'))
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectPriceShocks'))
+		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.detectstddevshocks", _TRANS('WOWUCTION_Interface_DetectStddevShocks'))
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectStddevShocks'))
+		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_N') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_N'))
+
 	end
 
 	local tooltipID = AucAdvanced.Settings.Gui.tooltipID
