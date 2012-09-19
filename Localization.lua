@@ -63,7 +63,7 @@
 		["WOWUCTION_Interface_MinErrorPercent"] = "Minimum standard error",
 		["WOWUCTION_Interface_N"] = "Region-wide auction house count",
 		["WOWUCTION_Interface_Confidence"] = "Default confidence",
-		["WOWUCTION_HelpTooltip_FallbackConfidence"] = "Region-Wide Fallback confidence",
-		["WOWUCTION_HelpTooltip_ShockConfidence"] = "Price Breakout confidence",
+		["WOWUCTION_Interface_FallbackConfidence"] = "Region-Wide Fallback confidence",
+		["WOWUCTION_Interface_ShockConfidence"] = "Price Breakout confidence",
 	},
 }
