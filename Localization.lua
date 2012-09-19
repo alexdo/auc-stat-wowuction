@@ -48,8 +48,11 @@
 		["WOWUCTION_HelpTooltip_DetectStddevShocks"] = "Widen the margin of error for item prices that show more realm-to-realm variation today than normally. This may indicate that a recent systematic change, such as a patch, has shrunk the markets for the item.",
 		["WOWUCTION_HelpTooltip_DetectPriceShocks"] = "Use the current market price instead of the 14-day moving median when today's region-wide median price is an outlier on the same side. This may indicate that a recent systematic change, such as a patch, has permanently changed the price range.",
 		["WOWUCTION_HelpTooltip_CurrentPriceWeight"] = "Percentage of the price estimate that comes from the latest market price rather than the 14-day median. Increase if Auctioneer market prices aren't keeping up with market trends; decrease if they become unstable. If Price Breakout Detection is enabled, it will override this setting when triggered.",
-		["WOWUCTION_HelpTooltip_N"] = "The number of active Auction Houses in this region (usually one Alliance and one Horde in every realm), excluding public test and Arena Pass realms. Only used if Price Breakout Detection, Volatility Shock Detection or Region-Wide Fallback is enabled.",
+		["WOWUCTION_HelpTooltip_N"] = "The number of active Auction Houses in this region (usually one Alliance and one Horde in every realm), excluding public test and Arena Pass realms. Only used for Price Breakout Detection, Volatility Shock Detection and Region-Wide Fallback.",
 		["WOWUCTION_HelpTooltip_MinErrorPercent"] = "A minimum estimate of the standard error of the median, as a percentage. Use this to avoid overreacting to small fluctuations when the tooltip +/- ranges are abnormally low.",
+		["WOWUCTION_HelpTooltip_Confidence"] = "Increases the weight of Auc-Stat-WoWuction's estimates relative to other stat modules when Price Breakout Detection and Region-Wide Fallback are disabled or not triggered. Each tick doubles the weight; the leftmost setting gives it the same weight as other modules when the error margin is the same.",
+		["WOWUCTION_HelpTooltip_FallbackConfidence"] = "Increases the weight of Auc-Stat-WoWuction's estimates relative to other stat modules, even when Region-Wide Fallback is triggered. Each tick doubles the weight; the leftmost setting gives it the same weight as other modules when the error margin is the same.",
+		["WOWUCTION_HelpTooltip_ShockConfidence"] = "Increases the weight of Auc-Stat-WoWuction's estimates relative to other stat modules, even when Price Breakout Detection is triggered. Each tick doubles the weight; the leftmost setting gives it the same weight as other modules when the error margin is the same.",
 		-- Section: Interface
 		["WOWUCTION_Interface_Enablewowuction"] = "Enable WoWuction Realm Stats",
 		["WOWUCTION_Interface_RegionFallback"] = "Region-Wide Fallback",
@@ -59,5 +62,8 @@
 		["WOWUCTION_Interface_CurrentPriceWeight"] = "Weight of current price",
 		["WOWUCTION_Interface_MinErrorPercent"] = "Minimum standard error",
 		["WOWUCTION_Interface_N"] = "Region-wide auction house count",
+		["WOWUCTION_Interface_Confidence"] = "Default confidence",
+		["WOWUCTION_HelpTooltip_FallbackConfidence"] = "Region-Wide Fallback confidence",
+		["WOWUCTION_HelpTooltip_ShockConfidence"] = "Price Breakout confidence",
 	},
 }

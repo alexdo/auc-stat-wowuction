@@ -86,11 +86,11 @@ function lib.GetPriceArray(id, serverKey)
 	wipe(array)
 --	local _, _, _, _, id = hyperlink:find("|?c?f?f?(%x*)|?H?([^:]*):?(%d+):?(%d*):?(%d*):?(%d*):?(%d*):?(%d*):?(%-?%d*):?(%-?%d*):?(%d*)|?h?%[?([^%[%]]*)%]?|?h?|?r?")
 	-- Required entries (see Stat-Example2)
-	array.price = TSM:GetData(id, "marketValue")
+	array.price = TSM:GetData(id, "medianPrice")
 	array.seen = seen
 	array.latest = TSM:GetData(id, "minBuyout")
-	array.median = TSM:GetData(id, "medianPrice")
-	array.mean = array.price
+	array.market = TSM:GetData(id, "marketValue")
+	array.median = array.price
 	array.stddev = TSM:GetData(id, "medianPriceErr")
 	array.cstddev = TSM:GetData(id, "marketValueErr")
 	array.region_median = TSM:GetData(id, "regionMedianPrice")
@@ -115,7 +115,7 @@ function lib.GetItemPDF(hyperlink, serverKey)
 		n = get("stat.wowuction.n")
 		local array = lib.GetPriceArray(hyperlink, serverKey)
 		median = array.median
-		local price = array.price
+		local price = array.market
 		local regionMedian = array.region_median
 		local regionStddev = array.region_stddev
 		local regionPrice = array.region_price
@@ -127,7 +127,7 @@ function lib.GetItemPDF(hyperlink, serverKey)
 			if median then
 				price = median
 			elseif get("stat.wowuction.regionfallback") then
-				confidence = 1 -- don't apply confidence multiplier when using a region fallback for median price
+				confidence = get("stat.wowuction.fallbackconfidence")
 				median = regionMedian
 				if regionPrice then
 					price = regionPrice
@@ -167,7 +167,7 @@ function lib.GetItemPDF(hyperlink, serverKey)
 							-- stddev-widening shock detected!
 							print(string.format(_TRANS('WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'), hyperlink, adjustedStddev, regionCurrentStddev))
 							stddev = stddev * regionCurrentStddev / adjustedStddev
-							confidence = 1
+							-- confidence = 1
 						end
 					end
 					if priceshock then
@@ -177,7 +177,7 @@ function lib.GetItemPDF(hyperlink, serverKey)
 							print(string.format(_TRANS('WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'), hyperlink, adjustedStddev, z))
 							-- median now obsolete, so use latest price
 							median = price
-							confidence = 1
+							confidence = get("stat.wowuction.shockconfidence")
 							-- check for widened stddev
 							local newErr = array.cstddev
 							if newErr and (newErr > stddev) then
@@ -197,7 +197,7 @@ function lib.GetItemPDF(hyperlink, serverKey)
 			median = median * (1 - currWeight) + price * currWeight
 		else
 			median = price
-			confidence = 1 -- don't apply confidence multiplier when no median
+			-- confidence = 1 -- don't apply confidence multiplier when no median
 		end
 		stddev = stddev / confidence
 --		pdfcache[hyperlink] = {["median"] = median, ["stddev"] = stddev}
@@ -216,7 +216,9 @@ end
 
 function private.OnLoad(addon)
 	default("stat.wowuction.enable", false)
-	default("stat.wowuction.confidence", 1)
+	default("stat.wowuction.confidence", 20)
+	default("stat.wowuction.shockconfidence", 10)
+	default("stat.wowuction.fallbackconfidence", 2)
 	default("stat.wowuction.cur_price_weight", 0.1)
 	default("stat.wowuction.maxz", 2) -- because this parameter is used to effectively apply median-centered Bollinger Bands
 	default("stat.wowuction.minerrorpct", 1)
@@ -273,8 +275,12 @@ function private.SetupConfigGui(gui)
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectStddevShocks'))
 		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_Interface_N') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_N'))
-		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.confidence", 0, 10, 0.5, _TRANS('WOWUCTION_ConfidenceMultiplier') )
-		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_ConfidenceMultiplier'))
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.confidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_Confidence') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Confidence'))
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.fallbackconfidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_FallbackConfidence') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_FallbackConfidence'))
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.shockconfidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_ShockConfidence') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_ShockConfidence'))
 		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.regionfallback", _TRANS('WOWUCTION_Interface_RegionFallback'))
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_RegionFallback'))
 
