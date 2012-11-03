@@ -196,7 +196,7 @@ function private.OnLoad(addon)
 	default("stat.wowuction.confidence", 20)
 --	default("stat.wowuction.shockconfidence", 10)
 	default("stat.wowuction.fallbackconfidence", 2)
-	default("stat.wowuction.projection", 0)
+	default("stat.wowuction.projection", -3.5)
 	default("stat.wowuction.regionagreement", 1)
 --	default("stat.wowuction.maxz", 2) -- because this parameter is used to effectively apply median-centered Bollinger Bands
 	default("stat.wowuction.minerrorpct", 1)
