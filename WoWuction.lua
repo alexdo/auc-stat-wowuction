@@ -112,99 +112,76 @@ function lib.GetItemPDF(hyperlink, serverKey)
 --		median = pdfcache[hyperlink]["median"]
 --		stddev = pdfcache[hyperlink]["stddev"]
 --	else
-		n = get("stat.wowuction.n")
-		local array = lib.GetPriceArray(hyperlink, serverKey)
-		median = array.median
-		local price = array.market
-		local regionMedian = array.region_median
-		local regionStddev = array.region_stddev
-		local regionPrice = array.region_price
-		stddev = array.stddev or array.cstddev
-		local priceshock = get("stat.wowuction.detectpriceshocks")
-		local stddevshock = get("stat.wowuction.detectstddevshocks")
-		local confidence = get("stat.wowuction.confidence")
-		if not price then
-			if median then
-				price = median
-			elseif get("stat.wowuction.regionfallback") then
-				confidence = get("stat.wowuction.fallbackconfidence")
-				median = regionMedian
-				if regionPrice then
-					price = regionPrice
-				elseif not median then
-					return -- no data
-				else
-					priceshock = false -- nothing to check against
-				end
-			else
-				return -- no data
-			end
-		end
-		if not stddev then
-			if regionStddev and get("stat.wowuction.regionfallback") then
-				stddev = regionStddev * sqrt(n-1) -- conservative estimate
-				stddevshock = false -- nothing to check against
+	n = get("stat.wowuction.n")
+	local currWeight = get("stat.wowuction.projection") / 7 - 1
+	-- 0 = -7 days = 0% current value, 100% 14-day median
+	-- 1 = +0 days = 100% current value, 0% median
+	-- 2 = +7 days = 200% current value, -100% median
+	local array = lib.GetPriceArray(hyperlink, serverKey)
+	local currPrice = array.market
+	local median = array.median
+	local currStddev = array.cstddev
+	local stddev = array.stddev
+	local projectedPrice, projectedStddev, regionProjectedPrice, regionProjectedStddev
+	local regionCurrPrice = array.region_price
+	local regionMedian = array.region_median
+	local regionFallback = get("stat.wowuction.regionfallback")
+	local confidence = get("stat.wowuction.confidence")
+	local regionResidual = regionCurrStddev or regionStddev or nil
+	local residual = currStddev or stddev or nil
+	if regionStddev and regionCurrStddev then
+		regionProjectedStddev = regionStddev * (1 - currWeight) + regionCurrStddev * currWeight
+	else
+		regionProjectedStddev = regionResidual
+	end
+	if currStddev and stddev then
+		projectedStddev = stddev * (1 - currWeight) + currStddev * currWeight
+	else
+		projectedStddev = residual
+		if not projectedStddev then
+			if regionFallback and regionProjectedStddev then
+				local n = get("stat.wowuction.n")
+				projectedStddev = regionProjectedStddev * sqrt(n - 1) -- conservative estimate: region is a larger sample than realm
+				residual = regionResidual * sqrt(n - 1)
 			else
 				return -- no stddev
 			end
 		end
-		if median then
-			local minpct = get("stat.wowuction.minerrorpct") * .01
-			if stddev < median*minpct then stddev = median*minpct end
-			local zlimit = get("stat.wowuction.maxz")
-			if priceshock or stddevshock then
-				if regionMedian and regionStddev and regionPrice then 
-					if regionStddev < regionMedian*minpct then regionStddev = regionMedian * minpct end
-					-- use this realm's medianPriceErr and the number of realms to estimate
-					-- how much increase of regionMarketPriceErr over regionMedianPriceErr
-					-- could be explained by "normal" within-realm fluctuations
-					-- (multiplied by regionMedian/median to convert from realm-specific to median-realm coins,
-					-- and assuming we're on a representative realm in all other respects)
-					local adjustedStddev = sqrt(regionStddev*regionStddev + regionMedian*stddev*stddev/((n-1)*median))
-					if stddevshock then
-						local regionCurrentStddev = array.region_cstddev
-						if regionCurrentStddev > adjustedStddev * zlimit then
-							-- stddev-widening shock detected!
-							print(string.format(_TRANS('WOWUCTION_alert_stddevshock_item_%s_expected_%d_actual_%d'), hyperlink, adjustedStddev, regionCurrentStddev))
-							stddev = stddev * regionCurrentStddev / adjustedStddev
-							-- confidence = 1
-						end
-					end
-					if priceshock then
-						local z = (regionPrice - regionMedian)/adjustedStddev
-						if (z > zlimit and price > median) or (z < -zlimit and price < median) then
-							-- price shock detected!
-							print(string.format(_TRANS('WOWUCTION_alert_priceshock_item_%s_Z_%f_expected_%d'), hyperlink, adjustedStddev, z))
-							-- median now obsolete, so use latest price
-							median = price
-							confidence = get("stat.wowuction.shockconfidence")
-							-- check for widened stddev
-							local newErr = array.cstddev
-							if newErr and (newErr > stddev) then
-								stddev = newErr
-							end
-						end
-					end
-				end
-			end
-			local z = (price - median)/stddev
-			if z > zlimit then
-				price = median + zlimit*stddev
-			elseif z < -zlimit then
-				price = median - zlimit*stddev
-			end
-			local currWeight = get("stat.wowuction.cur_price_weight")
-			median = median * (1 - currWeight) + price * currWeight
+	end
+	if regionCurrPrice and regionMedian then
+		regionProjectedPrice = regionCurrPrice * currWeight + regionMedian * (1 - currWeight)
+	else
+		regionProjectedPrice = regionCurrPrice or regionMedian or nil
+	end
+	if currPrice and median then
+		local adjCurrWeight
+		local regionAgreement = get("stat.wowuction.regionagreement")
+		if regionCurrPrice and regionMedian and regionProjectedStddev and regionAgreement then
+			-- estimate total variance and covariance of realm and region price time-series
+			-- assumes uncorrelated residuals (probably errs on the side of smaller adjustment)
+			local totalVariance = sqrt((residual^2 + (currPrice - median)^2/3)*(regionResidual^2 + (regionCurrPrice - median)^2/3))
+			local covar = (regionCurrPrice - regionMedian)*(currPrice - median)/totalVariance
+			adjCurrWeight = currWeight * (1 + covar * regionAgreement)
 		else
-			median = price
-			-- confidence = 1 -- don't apply confidence multiplier when no median
+			adjCurrWeight = currWeight
 		end
-		stddev = stddev / confidence
---		pdfcache[hyperlink] = {["median"] = median, ["stddev"] = stddev}
---	end
+		projectedPrice = currPrice * adjCurrWeight + median * (1 - adjCurrWeight)
+	else 
+		projectedPrice = currPrice or median or nil
+		if not projectedPrice then
+			if regionFallback and regionProjectedPrice then
+				projectedPrice = regionProjectedPrice
+				confidence = get("stat.wowuction.fallbackconfidence")
+			else
+				return -- no price
+			end
+		end
+	end
+	local minErrorPct = get("stat.wowuction.minerrorpct")
+	projectedStddev = math.max(projectedStddev, minErrorPct * projectedPrice) / confidence
 	-- Calculate the lower and upper bounds as +/- 3 standard deviations
-	local lower, upper = (median - 3 * stddev), (median + 3 * stddev)
-	bellCurve:SetParameters(median, stddev)
+	local lower, upper = (projectedPrice - 3 * projectedStddev), (projectedPrice + 3 * projectedStddev)
+	bellCurve:SetParameters(projectedPrice, projectedStddev)
 	return bellCurve, lower, upper
 end
 
@@ -217,13 +194,14 @@ end
 function private.OnLoad(addon)
 	default("stat.wowuction.enable", false)
 	default("stat.wowuction.confidence", 20)
-	default("stat.wowuction.shockconfidence", 10)
+--	default("stat.wowuction.shockconfidence", 10)
 	default("stat.wowuction.fallbackconfidence", 2)
-	default("stat.wowuction.cur_price_weight", 0.1)
-	default("stat.wowuction.maxz", 2) -- because this parameter is used to effectively apply median-centered Bollinger Bands
+	default("stat.wowuction.projection", 0)
+	default("stat.wowuction.regionagreement", 1)
+--	default("stat.wowuction.maxz", 2) -- because this parameter is used to effectively apply median-centered Bollinger Bands
 	default("stat.wowuction.minerrorpct", 1)
-	default("stat.wowuction.detectpriceshocks", true)
-	default("stat.wowuction.detectstddevshocks", false)
+--	default("stat.wowuction.detectpriceshocks", true)
+--	default("stat.wowuction.detectstddevshocks", false)
 	default("stat.wowuction.n", 492) -- 2 factions * 246 US realms as of 2012-09-17 (excludes Arena Pass)
 	private.OnLoad = nil -- only run this function once
 end
@@ -263,24 +241,20 @@ function private.SetupConfigGui(gui)
 		gui:AddControl(id, "Note",       0, 1, nil, nil, " ")
 		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.enable", _TRANS('WOWUCTION_Interface_Enablewowuction'))
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Enablewowuction'))
-		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.cur_price_weight", 0, 1, 0.05, _TRANS('WOWUCTION_Interface_CurrentPriceWeight') )
-		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_CurrentPriceWeight'))
+		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.projection", -14, 14, 0.5, _TRANS('WOWUCTION_Interface_Projection') )
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Projection'))
 		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.maxz", 0, 1000, _TRANS('WOWUCTION_Interface_MaxZScore') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_MaxZScore'))
 		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.minerrorpct", 0, 10, 0.5, _TRANS('WOWUCTION_Interface_MinErrorPercent') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_MinErrorPercent'))
-		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.detectpriceshocks", _TRANS('WOWUCTION_Interface_DetectPriceShocks'))
-		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectPriceShocks'))
-		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.detectstddevshocks", _TRANS('WOWUCTION_Interface_DetectStddevShocks'))
-		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_DetectStddevShocks'))
+		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.regionagreement", 0, 1, 0.1, _TRANS('WOWUCTION_Interface_RegionAgreement'))
+		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_RegionAgreement'))
 		gui:AddControl(id, "NumberBox",	0, 1, "stat.wowuction.n", 0, 1000, _TRANS('WOWUCTION_Interface_N') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_N'))
 		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.confidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_Confidence') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_Confidence'))
 		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.fallbackconfidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_FallbackConfidence') )
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_FallbackConfidence'))
-		gui:AddControl(id, "WideSlider",	0, 1, "stat.wowuction.shockconfidence", 0, 30, 1, _TRANS('WOWUCTION_Interface_ShockConfidence') )
-		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_ShockConfidence'))
 		gui:AddControl(id, "Checkbox",   0, 1, "stat.wowuction.regionfallback", _TRANS('WOWUCTION_Interface_RegionFallback'))
 		gui:AddTip(id, _TRANS('WOWUCTION_HelpTooltip_RegionFallback'))
 
