@@ -84,19 +84,24 @@ function lib.GetPriceArray(id, serverKey)
 	if not get("stat.wowuction.enable") then return end
 	seen = get("stat.wowuction.seen")
 	wipe(array)
+
+
 --	local _, _, _, _, id = hyperlink:find("|?c?f?f?(%x*)|?H?([^:]*):?(%d+):?(%d*):?(%d*):?(%d*):?(%d*):?(%d*):?(%-?%d*):?(%-?%d*):?(%d*)|?h?%[?([^%[%]]*)%]?|?h?|?r?")
 	-- Required entries (see Stat-Example2)
-	array.price = TSM:GetData(id, "medianPrice")
+
+    -- TSMAPI keys suffixed with "Err" are supposed to return an error?
+    -- Not quite sure about the implications of that ... furthermore, why not put a 0 in there?
+	array.price = TSMAPI:GetItemValue(id, "wowuctionMedian")
 	array.seen = seen
-	array.latest = TSM:GetData(id, "minBuyout")
-	array.market = TSM:GetData(id, "marketValue")
+	array.latest = TSMAPI:GetItemValue(id, "DBMinBuyout") -- minBuyout does not exist anymore so we need to fallback to AuctionDB
+	array.market = TSMAPI:GetItemValue(id, "wowuctionMarket")
 	array.median = array.price
-	array.stddev = TSM:GetData(id, "medianPriceErr")
-	array.cstddev = TSM:GetData(id, "marketValueErr")
-	array.region_median = TSM:GetData(id, "regionMedianPrice")
-	array.region_stddev = TSM:GetData(id, "regionMedianPriceErr")
-	array.region_price = TSM:GetData(id, "regionMarketValue")
-	array.region_cstddev = TSM:GetData(id, "regionMarketValueErr") or 0
+	array.stddev = TSMAPI:GetItemValue(id, "wowuctionMedianErr")
+	array.cstddev = TSMAPI:GetItemValue(id, "wowuctionMarketErr")
+	array.region_median = TSMAPI:GetItemValue(id, "wowuctionRegionMedian")
+	array.region_stddev = TSMAPI:GetItemValue(id, "wowuctionRegionMedianErr")
+	array.region_price = TSMAPI:GetItemValue(id, "wowuctionRegionMarket")
+	array.region_cstddev = TSMAPI:GetItemValue(id, "wowuctionRegionMarketErr") or 0
 	array.qty = seen
 
 	return array
@@ -212,7 +217,7 @@ end
 --~ 	local linkType, itemId, suffix, factor = decode(hyperlink)
 --~ 	if (linkType ~= "item") then return end
 
---~ 	local dta = TSM:GetData(itemId, serverKey)
+--~ 	local dta = TSMAPI:GetItemValue(itemId, serverKey)
 --~ 	return dta
 --~ end
 
