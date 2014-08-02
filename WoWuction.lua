@@ -2,8 +2,8 @@
 	Auc-Stat-wowuction - WowUction price statistics module
 
 	This is an Auctioneer statistics module that returns price data from 
-	TradeSkillMaster_WoWuction addon.  You must have either The Undermine Journal
-	or TradeSkillMaster_WoWuction addon installed for this module to have any
+	TSM_WoWuction addon.  You must have either The Undermine Journal
+	or TSM_WoWuction addon installed for this module to have any
 	effect.
 
 	Copyright (c) 2011 Johnny C. Lam, 2012 Chris Hennick
@@ -269,7 +269,7 @@ function private.SetupConfigGui(gui)
 end
 
 function private.IswowuctionLoaded()
-	TSM = LibStub("AceAddon-3.0"):GetAddon("TradeSkillMaster_WoWuction")
+	TSM = LibStub("AceAddon-3.0"):GetAddon("TSM_WoWuction")
 	return TSM and true or false
 end
 
