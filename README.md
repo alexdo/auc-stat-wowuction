@@ -10,7 +10,7 @@ pulls any data out of TSM_WoWuction. Instead, it throws an exception.
 
 ## How to install
 
-1. Download this repository
+1. Download the latest release from https://github.com/alexdo/auc-stat-wowuction/releases
 1. Extract it into your `<WoW>/Interface/AddOns` folder, *overwriting all existing files*.
 1. Happy Auctioning!
 
