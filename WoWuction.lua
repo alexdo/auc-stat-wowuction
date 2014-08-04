@@ -39,8 +39,6 @@ return end
 local wowuction = select(2, ...)
 wowuction = LibStub("AceAddon-3.0"):NewAddon(wowuction, "Auc-Stat-WoWuction", "AceConsole-3.0")
 
-local TSM
-
 local AceGUI = LibStub("AceGUI-3.0") -- load the AceGUI libraries
 
 local libType, libName = "Stat", "WoWuction"
@@ -192,7 +190,6 @@ end
 
 function lib.IsValidAlgorithm()
 	if not get("stat.wowuction.enable") then return false end
-	if not private.IswowuctionLoaded() then return false end
 	return true
 end
 
@@ -212,7 +209,6 @@ function private.OnLoad(addon)
 end
 
 --~ function private.GetInfo(hyperlink, serverKey)
---~ 	if not private.IswowuctionLoaded() then return end
 
 --~ 	local linkType, itemId, suffix, factor = decode(hyperlink)
 --~ 	if (linkType ~= "item") then return end
@@ -272,10 +268,3 @@ function private.SetupConfigGui(gui)
 
 	private.SetupConfigGui = nil -- only run once
 end
-
-function private.IswowuctionLoaded()
-	TSM = LibStub("AceAddon-3.0"):GetAddon("TSM_WoWuction")
-	return TSM and true or false
-end
-
-private.IswowuctionLoaded()
